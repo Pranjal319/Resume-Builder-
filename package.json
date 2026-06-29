@@ -1,0 +1,23 @@
+{
+  "name": "career-ai-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CareerAI — AI-Powered Career & Resume Platform",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"backend\\venv\\Scripts\\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 --app-dir backend\"",
+    "build": "npm --prefix frontend run build",
+    "install:frontend": "npm --prefix frontend install"
+  },
+  "keywords": [
+    "resume-builder",
+    "career-ai",
+    "ats-scanner",
+    "fastapi",
+    "react",
+    "vite"
+  ],
+  "author": "",
+  "license": "MIT"
+}
