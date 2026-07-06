@@ -27,3 +27,21 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Set up CORS middleware with exposed Content-Disposition for PDF downloads
 app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
+)
+
+# Register API routes under /api
+app.include_router(api_router, prefix=settings.API_V1_STR)
+
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "message": "Welcome to CareerAI API",
+        "documentation": f"{settings.API_V1_STR}/docs",
+        "health_check": f"{settings.API_V1_STR}/health"
+    }
