@@ -57,4 +57,43 @@ function App() {
             } 
           />
           <Route 
-            path="/analyzer"
+            path="/analyzer" 
+            element={
+              <ProtectedRoute>
+                <ResumeAnalyzerPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/analyzer/:id" 
+            element={
+              <ProtectedRoute>
+                <ResumeAnalyzerPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/matcher" 
+            element={
+              <ProtectedRoute>
+                <JobMatcherPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/roadmap" 
+            element={
+              <ProtectedRoute>
+                <RoadmapPage />
+              </ProtectedRoute>
+            } 
+          />
+        </Routes>
+      </main>
+        <Footer />
+      </div>
+    </ThemeProvider>
+  )
+}
+
+export default App
