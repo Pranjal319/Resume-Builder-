@@ -92,3 +92,82 @@ async def analyze_uploaded_resume(
     _dev_analysis_store[analysis_id] = analysis_dict
 
     return ResumeAnalysisResponse(**analysis_dict)
+
+@router.post("/resume/{resume_id}", response_model=ResumeAnalysisResponse)
+async def analyze_saved_resume(
+    resume_id: str,
+    current_user: UserTokenPayload = Depends(get_current_user)
+):
+    """
+    Run ATS analysis on an existing resume created in the Resume Builder.
+    """
+    resume = _dev_resume_store.get(resume_id)
+    if not resume or resume["user_id"] != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found or access denied."
+        )
+
+    title = resume.get("title", "Resume")
+    content = resume.get("content", {})
+    text = resume_content_to_text(content, title)
+
+    analysis = await perform_resume_analysis(text, f"{title}.pdf")
+
+    analysis_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+
+    analysis_dict = analysis.model_dump()
+    analysis_dict["id"] = analysis_id
+    analysis_dict["user_id"] = current_user.user_id
+    analysis_dict["resume_id"] = resume_id
+    analysis_dict["created_at"] = now
+
+    _dev_analysis_store[analysis_id] = analysis_dict
+
+    return ResumeAnalysisResponse(**analysis_dict)
+
+@router.get("", response_model=List[ResumeAnalysisResponse])
+async def list_user_analyses(current_user: UserTokenPayload = Depends(get_current_user)):
+    """
+    List all previous resume analyses belonging to the authenticated user.
+    """
+    user_records = [
+        r for r in _dev_analysis_store.values()
+        if r.get("user_id") == current_user.user_id
+    ]
+    user_records.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return [ResumeAnalysisResponse(**r) for r in user_records]
+
+@router.get("/{analysis_id}", response_model=ResumeAnalysisResponse)
+async def get_analysis_report(
+    analysis_id: str,
+    current_user: UserTokenPayload = Depends(get_current_user)
+):
+    """
+    Fetch a specific historical analysis report.
+    """
+    record = _dev_analysis_store.get(analysis_id)
+    if not record or record.get("user_id") != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis report not found or access denied."
+        )
+    return ResumeAnalysisResponse(**record)
+
+@router.delete("/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_analysis_report(
+    analysis_id: str,
+    current_user: UserTokenPayload = Depends(get_current_user)
+):
+    """
+    Delete an analysis report.
+    """
+    record = _dev_analysis_store.get(analysis_id)
+    if not record or record.get("user_id") != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis report not found or access denied."
+        )
+    del _dev_analysis_store[analysis_id]
+    return None
