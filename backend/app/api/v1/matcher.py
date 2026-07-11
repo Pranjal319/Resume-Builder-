@@ -94,3 +94,82 @@ async def match_resume_with_job(
         if not job or job.get("user_id") != current_user.user_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
+                detail="Selected job description not found or access denied."
+            )
+        job_title = job.get("job_title", job_title)
+        company_name = job.get("company_name", company_name)
+        job_description = job.get("description", "")
+    elif payload.job_description:
+        job_description = payload.job_description
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide a job description text or select a saved job."
+        )
+
+    # Run multi-layer matching pipeline
+    match_result = await match_resume_to_job(
+        resume_text=resume_text,
+        job_title=job_title,
+        company_name=company_name,
+        job_description=job_description,
+        resume_title=resume_title
+    )
+
+    match_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+
+    match_dict = match_result.model_dump()
+    match_dict["id"] = match_id
+    match_dict["user_id"] = current_user.user_id
+    match_dict["job_id"] = payload.job_id
+    match_dict["resume_id"] = payload.resume_id
+    match_dict["created_at"] = now
+
+    _dev_matches_store[match_id] = match_dict
+    return JobMatchResponse(**match_dict)
+
+@router.get("/matches", response_model=List[JobMatchResponse])
+async def list_user_matches(current_user: UserTokenPayload = Depends(get_current_user)):
+    """
+    List past job matches for the authenticated user.
+    """
+    user_matches = [
+        m for m in _dev_matches_store.values()
+        if m.get("user_id") == current_user.user_id
+    ]
+    user_matches.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return [JobMatchResponse(**m) for m in user_matches]
+
+@router.get("/matches/{match_id}", response_model=JobMatchResponse)
+async def get_match_report(
+    match_id: str,
+    current_user: UserTokenPayload = Depends(get_current_user)
+):
+    """
+    Fetch a specific match report.
+    """
+    record = _dev_matches_store.get(match_id)
+    if not record or record.get("user_id") != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Match report not found or access denied."
+        )
+    return JobMatchResponse(**record)
+
+@router.delete("/matches/{match_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_match_report(
+    match_id: str,
+    current_user: UserTokenPayload = Depends(get_current_user)
+):
+    """
+    Delete a match report.
+    """
+    record = _dev_matches_store.get(match_id)
+    if not record or record.get("user_id") != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Match report not found or access denied."
+        )
+    del _dev_matches_store[match_id]
+    return None
