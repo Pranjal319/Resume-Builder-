@@ -105,3 +105,91 @@ async def get_resume(
     Fetch a single resume by ID.
     """
     resume = _dev_resume_store.get(resume_id)
+    if not resume or resume["user_id"] != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found or access denied."
+        )
+    return resume
+
+@router.get("/{resume_id}/pdf")
+async def download_resume_pdf(
+    resume_id: str,
+    current_user: UserTokenPayload = Depends(get_current_user)
+):
+    """
+    Download PDF directly for a saved resume record.
+    """
+    resume = _dev_resume_store.get(resume_id)
+    if not resume or resume["user_id"] != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found or access denied."
+        )
+
+    content = resume.get("content", {})
+    template_id = resume.get("template_id", "ats-friendly")
+    title = resume.get("title", "Resume")
+
+    pdf_bytes = generate_resume_pdf(
+        content=content,
+        template_id=template_id,
+        title=title
+    )
+
+    full_name = content.get("personal_info", {}).get("full_name", "")
+    filename = get_safe_filename(title, full_name)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
+@router.put("/{resume_id}", response_model=ResumeResponse)
+async def update_resume(
+    resume_id: str,
+    payload: ResumeUpdate,
+    current_user: UserTokenPayload = Depends(get_current_user)
+):
+    """
+    Update resume metadata or content (autosave endpoint).
+    """
+    resume = _dev_resume_store.get(resume_id)
+    if not resume or resume["user_id"] != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found or access denied."
+        )
+
+    if payload.title is not None:
+        resume["title"] = payload.title
+    if payload.template_id is not None:
+        resume["template_id"] = payload.template_id
+    if payload.content is not None:
+        resume["content"] = payload.content.model_dump()
+
+    resume["updated_at"] = datetime.now(timezone.utc)
+    _dev_resume_store[resume_id] = resume
+    return resume
+
+@router.delete("/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_resume(
+    resume_id: str,
+    current_user: UserTokenPayload = Depends(get_current_user)
+):
+    """
+    Delete a resume by ID.
+    """
+    resume = _dev_resume_store.get(resume_id)
+    if not resume or resume["user_id"] != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resume not found or access denied."
+        )
+
+    del _dev_resume_store[resume_id]
+    return None
