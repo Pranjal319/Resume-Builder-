@@ -83,3 +83,72 @@ async def get_active_roadmap(current_user: UserTokenPayload = Depends(get_curren
     return RoadmapResponse(**user_roadmaps[0])
 
 @router.get("", response_model=List[RoadmapResponse])
+async def list_roadmaps(current_user: UserTokenPayload = Depends(get_current_user)):
+    """
+    List all generated learning roadmaps for the user.
+    """
+    user_roadmaps = [
+        r for r in _dev_roadmaps_store.values()
+        if r.get("user_id") == current_user.user_id
+    ]
+    user_roadmaps.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return [RoadmapResponse(**r) for r in user_roadmaps]
+
+@router.patch("/{roadmap_id}/milestones/{milestone_id}", response_model=RoadmapResponse)
+async def toggle_milestone(
+    roadmap_id: str,
+    milestone_id: str,
+    payload: MilestoneToggleRequest,
+    current_user: UserTokenPayload = Depends(get_current_user)
+):
+    """
+    Toggle milestone completion status and update progress percentage.
+    """
+    roadmap = _dev_roadmaps_store.get(roadmap_id)
+    if not roadmap or roadmap.get("user_id") != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Roadmap not found or access denied."
+        )
+
+    milestones = roadmap.get("milestones", [])
+    found = False
+    completed_count = 0
+
+    for m in milestones:
+        if m.get("id") == milestone_id:
+            m["completed"] = payload.completed
+            found = True
+        if m.get("completed"):
+            completed_count += 1
+
+    if not found:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Milestone not found in this roadmap."
+        )
+
+    # Recalculate progress percentage
+    total = len(milestones)
+    progress = int((completed_count / total) * 100) if total > 0 else 0
+    roadmap["progress_percentage"] = progress
+    roadmap["updated_at"] = datetime.now(timezone.utc)
+
+    return RoadmapResponse(**roadmap)
+
+@router.delete("/{roadmap_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_roadmap(
+    roadmap_id: str,
+    current_user: UserTokenPayload = Depends(get_current_user)
+):
+    """
+    Delete a learning roadmap.
+    """
+    roadmap = _dev_roadmaps_store.get(roadmap_id)
+    if not roadmap or roadmap.get("user_id") != current_user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Roadmap not found or access denied."
+        )
+    del _dev_roadmaps_store[roadmap_id]
+    return None
